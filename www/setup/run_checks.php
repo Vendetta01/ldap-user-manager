@@ -2,7 +2,7 @@
 
 include_once __DIR__ . "/../includes/web_functions.inc.php";
 include_once __DIR__ . "/../includes/ldap_functions.inc.php";
-include_once __DIR__ . "/../includes/module_functions.inc.php";
+include_once __DIR__ . "/module_functions.inc.php";
 
 validate_setup_cookie();
 set_page_access("setup");
@@ -107,34 +107,38 @@ else {
        <ul class="list-group">
 <?php
 
-$gid_filter  = "(&(objectclass=device)(cn=lastGID))";
-$ldap_gid_search = ldap_search($ldap_connection, "${LDAP['base_dn']}", $gid_filter);
-$gid_result = ldap_get_entries($ldap_connection, $ldap_gid_search);
+$gid_filter  = "(&(objectclass=*))";
+# @ suppresses any warnings from the search
+$ldap_gid_search = @ldap_search($ldap_connection, $LDAP['current_id_dn'], $gid_filter);
+
+if ($ldap_gid_search)
+    $gid_result = ldap_get_entries($ldap_connection, $ldap_gid_search);
 
 if ($gid_result['count'] != 1) {
-
- print "$li_warn The <strong>lastGID</strong> entry doesn't exist. ";
- print "<a href='#' data-toggle='popover' title='cn=lastGID,${LDAP['base_dn']}' data-content='";
+ print "$li_warn The <strong>${LDAP['current_id_dn']}</strong> entry doesn't exist. ";
+ print "<a href='#' data-toggle='popover' title='${LDAP['current_id_dn']}' data-content='";
  print "This is used to store the last group ID used when creating a POSIX group.  Without this the highest current group ID is found and incremented, but this might re-use the GID from a deleted group.";
  print "'>What's this?</a>";
  print "<label class='pull-right'><input type='checkbox' name='setup_last_gid' class='pull-right' checked>Create?&nbsp;</label>";
  print "</li>\n";
  $show_finish_button = FALSE;
- 
 }
 else {
- print "$li_good The <strong>lastGID</strong> entry is present.</li>";
+ print "$li_good The <strong>${LDAP['current_id_dn']}</strong> entry is present.</li>";
 }
 
 
-$uid_filter  = "(&(objectclass=device)(cn=lastUID))";
-$ldap_uid_search = ldap_search($ldap_connection, "${LDAP['base_dn']}", $uid_filter);
-$uid_result = ldap_get_entries($ldap_connection, $ldap_uid_search);
+$uid_filter  = "(&(objectclass=*))";
+# @ suppresses any warnings from the search
+$ldap_uid_search = @ldap_search($ldap_connection, $LDAP['current_id_dn'], $uid_filter);
+
+if ($ldap_uid_search)
+    $uid_result = ldap_get_entries($ldap_connection, $ldap_uid_search);
 
 if ($uid_result['count'] != 1) {
 
- print "$li_warn The <strong>lastUID</strong> entry doesn't exist. ";
- print "<a href='#' data-toggle='popover' title='cn=lastUID,${LDAP['base_dn']}' data-content='";
+ print "$li_warn The <strong>${LDAP['current_id_dn']}</strong> entry doesn't exist. ";
+ print "<a href='#' data-toggle='popover' title='${LDAP['current_id_dn']}' data-content='";
  print "This is used to store the last user ID used when creating a POSIX account.  Without this the highest current user ID is found and incremented, but this might re-use the UID from a deleted account.";
  print "'>What's this?</a>";
  print "<label class='pull-right'><input type='checkbox' name='setup_last_uid' class='pull-right' checked>Create?&nbsp;</label>";
@@ -143,11 +147,11 @@ if ($uid_result['count'] != 1) {
  
 }
 else {
- print "$li_good The <strong>lastUID</strong> entry is present.</li>";
+ print "$li_good The <strong>${LDAP['current_id_dn']}</strong> entry is present.</li>";
 }
 
 
-$defgroup_filter  = "(&(objectclass=posixGroup)(cn=${DEFAULT_USER_GROUP}))";
+$defgroup_filter  = "(&(objectclass=groupOfNames)(cn=${DEFAULT_USER_GROUP}))";
 $ldap_defgroup_search = ldap_search($ldap_connection, "${LDAP['base_dn']}", $defgroup_filter);
 $defgroup_result = ldap_get_entries($ldap_connection, $ldap_defgroup_search);
 
@@ -167,7 +171,7 @@ else {
 }
 
 
-$adminsgroup_filter  = "(&(objectclass=posixGroup)(cn=${LDAP['admins_group']}))";
+$adminsgroup_filter  = "(&(objectclass=groupOfNames)(cn=${LDAP['admins_group']}))";
 $ldap_adminsgroup_search = ldap_search($ldap_connection, "${LDAP['base_dn']}", $adminsgroup_filter);
 $adminsgroup_result = ldap_get_entries($ldap_connection, $ldap_adminsgroup_search);
 

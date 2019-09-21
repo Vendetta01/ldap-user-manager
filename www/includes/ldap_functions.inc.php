@@ -19,7 +19,7 @@ function open_ldap_connection() {
  ldap_set_option($ldap_connection, LDAP_OPT_PROTOCOL_VERSION, 3);
 
  
- if (!preg_match("/^ldaps:/", $LDAP['uri'])) {
+ if (!preg_match("/^ldaps:/", $LDAP['uri']) and $LDAP['try_starttls'] == TRUE) {
 
   $tls_result = ldap_start_tls($ldap_connection);
 
@@ -113,10 +113,22 @@ function ldap_setup_auth($ldap_connection, $password) {
 ##################################
 
 function ldap_hashed_password($password) {
+    if (strcmp($LDAP['password_encoding'], 'SSHA') == 0)
+	return ldap_hashed_password_ssha($password);
+    else
+	return ldap_hashed_password_md5($password);
+}
 
- $hashed_pwd = '{MD5}' . base64_encode(md5($password,TRUE));
+function ldap_hashed_password_md5($password) {
+
+ $hashed_pwd = '{MD5}'.base64_encode(md5($password, TRUE));
  return $hashed_pwd;
+}
 
+function ldap_hashed_password_ssha($password) {
+    $salt = random_bytes(4);
+    $hased_pwd = '{SSHA}'.base64_encode(sha1($password.$salt, TRUE).$salt);
+    return $hashed_pwd;
 }
 
 
@@ -160,48 +172,48 @@ function ldap_get_user_list($ldap_connection,$start=0,$entries=NULL,$sort="asc",
 
 
 function ldap_get_highest_id($ldap_connection,$type="uid") {
+    global $log_prefix, $LDAP, $min_uid, $min_gid;
 
- global $log_prefix, $LDAP, $min_uid, $min_gid;
+    if ($type == "uid") {
+	$this_id = $min_uid;
+	$record_base_dn = $LDAP['user_dn'];
+	$record_filter = "(${LDAP['account_attribute']}=*)";
+    }
+    else {
+	$type = "gid";
+	$this_id = $min_gid;
+	$record_base_dn = $LDAP['group_dn'];
+	$record_filter = "(objectClass=groupOfNames)";
+    }
 
- if ($type == "uid") {
-  $this_id = $min_uid;
-  $record_base_dn = $LDAP['user_dn'];
-  $record_filter = "(${LDAP['account_attribute']}=*)";
-  $record_attribute = array("uidNumber");
- }
- else {
-  $type = "gid";
-  $this_id = $min_gid;
-  $record_base_dn = $LDAP['group_dn'];
-  $record_filter = "(objectClass=posixGroup)";
-  $record_attribute = array("gidNumber");
- }
+    # record_attribute has to be all lower case since we use it a an index
+    # into an array and ldap returns field names always as lower case
+    $record_attribute = $type."number";
 
- $filter = "(&(objectclass=device)(cn=last${type}))";
- $ldap_search = ldap_search($ldap_connection, "${LDAP['base_dn']}", $filter, array('serialNumber'));
- $result = ldap_get_entries($ldap_connection, $ldap_search);
+    $filter = "(&(objectclass=*))";
 
- $fetched_id = $result[0]['serialnumber'][0];
+    $ldap_search = @ldap_search($ldap_connection, $LDAP['current_id_dn'], $filter, array($record_attribute));
+    if ($ldap_search) {
+	$result = ldap_get_entries($ldap_connection, $ldap_search);
+	$fetched_id = $result[0][$record_attribute][0];
+    }
 
- if (isset($fetched_id) and is_numeric($fetched_id)){
+    if (isset($fetched_id) and is_numeric($fetched_id))
+	$this_id = $fetched_id;
+    else {
+	$ldap_search = @ldap_search($ldap_connection, $record_base_dn, $record_filter, array($record_attribute));
+	if ($ldap_search)
+	    $result = ldap_get_entries($ldap_connection, $ldap_search);
 
-  $this_id = $fetched_id;
+	foreach ($result as $record) {
+	    #file_put_contents('php://stdout', '__DEBUG: record: '.print_r($record, TRUE));
+	    if (isset($record[$record_attribute][0])
+		    and $record[$record_attribute][0] > $this_id)
+		$this_id = $record[$record_attribute][0];
+	}
+    }
 
- }
- else {
-
-  $ldap_search = ldap_search($ldap_connection, $record_base_dn, $record_filter, $record_attribute);
-  $result = ldap_get_entries($ldap_connection, $ldap_search);
-
-  foreach ($result as $record) {
-   if (isset($record[$record_attribute][0])) {
-    if ($record[$record_attribute][0] > $this_id) { $this_id = $record[$record_attribute][0]; }
-   }
-  }
-
- }
-
- return($this_id);
+    return($this_id);
 
 }
 
@@ -247,17 +259,14 @@ function ldap_get_group_members($ldap_connection,$group_name,$start=0,$entries=N
 
  $records = array();
  foreach ($result[0][$LDAP['group_membership_attribute']] as $record => $value) {
-
-  if ($record != 'count' and isset($value)) {
-   array_push($records, $value);
+  if ($record !== 'count' and isset($value)) {
+      array_push($records, $value);
   }
  }
 
  if ($sort == "asc") { sort($records); } else { rsort($records); }
 
  return(array_slice($records,$start,$entries));
-
-
 }
 
 
@@ -302,7 +311,7 @@ function ldap_new_group($ldap_connection,$group_name) {
 
     $add_group = ldap_add($ldap_connection,
                           "cn=$group_name,${LDAP['group_dn']}",
-                          array(  'objectClass' => array( 'top', 'groupOfUniqueNames', 'posixGroup' ),
+                          array(  'objectClass' => array( 'top', 'groupOfNames', 'posixGroup' ),
                                   'cn' => $group_name,
                                   'gidNumber' => $new_gid,
                                   $LDAP['group_membership_attribute'] => ''
@@ -311,13 +320,13 @@ function ldap_new_group($ldap_connection,$group_name) {
 
    if ($add_group) {
     error_log("$log_prefix Added new group $group_name",0);
-    $update_gid = ldap_mod_replace($ldap_connection, "cn=lastGID,${LDAP['base_dn']}", array( 'serialNumber' => $new_gid ));
+    $update_gid = ldap_mod_replace($ldap_connection, $LDAP['current_id_dn'], array( 'uidNumber' => $new_gid ));
     if ($update_gid) {
-     error_log("$log_prefix Updated cn=lastGID with $new_gid",0);
+     error_log("$log_prefix Updated gidNumber in ${LDAP['current_id_dn']} with $new_gid",0);
      return TRUE;
     }
     else {
-     error_log("$log_prefix Failed to update cn=lastGID",0);
+     error_log("$log_prefix Failed to update gidNumber in ${LDAP['current_id_dn']} ",0);
     }
    }
 
@@ -383,7 +392,7 @@ function ldap_get_gid_of_group($ldap_connection,$group_name) {
 
 ##################################
 
-function ldap_new_account($ldap_connection,$first_name,$last_name,$username,$password,$email) {
+function ldap_new_account($ldap_connection,$first_name,$last_name,$username,$password,$email, $sambasid = 'S') {
 
  global $log_prefix, $LDAP, $DEFAULT_USER_SHELL, $DEFAULT_USER_GROUP;
 
@@ -410,8 +419,10 @@ function ldap_new_account($ldap_connection,$first_name,$last_name,$username,$pas
     }
 
     $hashed_pass = ldap_hashed_password($password);
-
-    $user_info = array(  'objectClass' => array( 'person', 'inetOrgPerson', 'posixAccount' ),
+    
+    # TODO:
+    # change to include samba (and so on)
+    $user_info = array(  'objectClass' => array( 'top', 'inetOrgPerson', 'posixAccount', 'sambaSamAccount', 'shadowAccount'),
                          'uid' => $username,
                          'givenName' => $first_name,
                          'sn' => $last_name,
@@ -422,7 +433,8 @@ function ldap_new_account($ldap_connection,$first_name,$last_name,$username,$pas
                          'loginShell' => $DEFAULT_USER_SHELL,
                          'homeDirectory' => "/home/$username",
                          'userPassword' => $hashed_pass,
-                         'mail' => $email
+			 'mail' => $email,
+			 'sambaSID' => $sambasid
                       );
 
     $add_account = ldap_add($ldap_connection,
@@ -433,13 +445,13 @@ function ldap_new_account($ldap_connection,$first_name,$last_name,$username,$pas
    if ($add_account) {
     error_log("$log_prefix Created new account: $username",0);
     ldap_add_member_to_group($ldap_connection,$add_to_group,$username);
-    $update_uid = ldap_mod_replace($ldap_connection, "cn=lastUID,${LDAP['base_dn']}", array( 'serialNumber' => $new_uid ));
+    $update_uid = ldap_mod_replace($ldap_connection, $LDAP['current_id_dn'], array( 'uidNumber' => $new_uid ));
     if ($update_uid) {
-     error_log("$log_prefix Create account; Updated cn=lastUID with $new_uid",0);
+     error_log("$log_prefix Create account; Updated uidNumber in ${LDAP['current_id_dn']} with $new_uid",0);
      return TRUE;
     }
     else {
-     error_log("$log_prefix Create account; Failed to update cn=lastUID",0);
+     error_log("$log_prefix Create account; Failed to update uidNumber in ${LDAP['current_id_dn']} ",0);
     }
 
    }
@@ -582,6 +594,34 @@ function ldap_change_password($ldap_connection,$username,$new_password) {
  }
 
 }
+
+
+##################################
+
+function ldap_get_sambasid() {
+    global $log_prefix, $LDAP;
+
+    $ldap_connection = open_ldap_connection();
+    $filter = "(&(objectClass=sambaDomain)(sambaDomainName=${LDAP['samba_domain_name']}))";
+    $attrs = Array("sambaSID");
+    $sambasid = FALSE;
+
+    # find sambaSID
+    $ldap_search = ldap_search($ldap_connection, $LDAP['base_dn'], $filter, $attrs);
+
+    if ($ldap_search) {
+	$result = ldap_get_entries($ldap_connection, $ldap_search);
+
+	$sambasid = $result[0][strtolower($attrs[0])][0];
+	if (isset($sambasid))
+	    return $sambasid;
+    }
+
+    error_log("$log_prefix Couldn't find sambaSID for ${LDAP['samba_domain_name']} or sambaSID is empty");
+
+    return FALSE;
+}
+
 
 
 ?>

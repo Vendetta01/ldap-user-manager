@@ -2,7 +2,7 @@
 
 include_once __DIR__ . "/../includes/web_functions.inc.php";
 include_once __DIR__ . "/../includes/ldap_functions.inc.php";
-include_once __DIR__ . "/../includes/module_functions.inc.php";
+include_once __DIR__ . "/module_functions.inc.php";
 
 if ( $_POST['setup_admin_account'] ) {
  $admin_setup = TRUE;
@@ -40,6 +40,7 @@ if (isset($_POST['create_account'])) {
  $last_name = stripslashes($_POST['last_name']);
  $username = stripslashes($_POST['username']);
  $password = $_POST['password'];
+ $sambasid = $_POST['sambasid'];
  
  if ($_POST['email']) { $email = stripslashes($_POST['email']); }
 
@@ -62,7 +63,7 @@ if (isset($_POST['create_account'])) {
 
   $ldap_connection = open_ldap_connection();
 
-  $new_account = ldap_new_account($ldap_connection, $first_name, $last_name, $username, $password, $email);
+  $new_account = ldap_new_account($ldap_connection, $first_name, $last_name, $username, $password, $email, $sambasid);
 
   if ($new_account) {
 
@@ -219,6 +220,14 @@ render_js_email_generator('username','email');
        <input type="text" class="form-control" id="email" name="email" <?php if (isset($email)){ print " value='$email'"; } ?> onkeyup="auto_email_update = false;">
       </div>
      </div>
+
+     <div class="form-group" id="email_div">
+      <label for="username" class="col-sm-2 control-label">SambaSID</label>
+      <div class="col-sm-6">
+       <input type="text" class="form-control" id="sambasid" name="sambasid" <?php print " value='".ldap_get_sambasid()."'"; ?>>
+      </div>
+     </div>
+
 
      <div class="form-group" id="password_div">
       <label for="password" class="col-sm-2 control-label">Password</label>

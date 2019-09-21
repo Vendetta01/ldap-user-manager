@@ -2,7 +2,7 @@
 
 include_once __DIR__ . "/../includes/web_functions.inc.php";
 include_once __DIR__ . "/../includes/ldap_functions.inc.php";
-include_once __DIR__ . "/../includes/module_functions.inc.php";
+include_once __DIR__ . "/module_functions.inc.php";
 
 validate_setup_cookie();
 set_page_access("setup");
@@ -58,46 +58,29 @@ if (isset($_POST['fix_problems'])) {
  }
 
 
- if (isset($_POST['setup_last_gid'])) {
+ if (isset($_POST['setup_last_gid']) || isset($_POST['setup_last_uid'])) {
+     $highest_uid = ldap_get_highest_id($ldap_connection,'uid');
+     $highest_gid = ldap_get_highest_id($ldap_connection,'gid');
+     #file_put_contents('php://stdout', '__DEBUG: highest_uid: '.print_r($highest_uid, TRUE));
+     #file_put_contents('php://stdout', '__DEBUG: highest_gid: '.print_r($highest_gid, TRUE));
+     $description = "Records the last UID/GID used to create a group or user. This prevents the re-use of a UID/GID from a deleted group.";
 
-  $highest_gid = ldap_get_highest_id($ldap_connection,'gid');
-  $description = "Records the last GID used to create a Posix group. This prevents the re-use of a GID from a deleted group.";
+     $id_add = ldap_add($ldap_connection, $LDAP['current_id_dn'], array( 'objectClass' => array('top', 'organizationalRole', 'sambaUnixIdPool'),
+	 'uidnumber' => $highest_uid,
+	 'gidNumber' => $highest_gid,
+	 'description' => $description )
+	);
 
-  $gid_add = ldap_add($ldap_connection, "cn=lastGID,${LDAP['base_dn']}", array( 'objectClass' => array('device','top'),
-                                                                                'serialnumber' => $highest_gid,
-                                                                                'description' => $description )
-                     );
-
-  if ($gid_add == TRUE) {
-   print "$li_good Created <strong>cn=lastGID,${LDAP['base_dn']}</strong></li>\n";
+  if ($id_add == TRUE) {
+   print "$li_good Created <strong>${LDAP['current_id_dn']}</strong></li>\n";
   }
   else {
    $error = ldap_error($ldap_connection);
-   print "$li_fail Couldn't create cn=lastGID,${LDAP['base_dn']}: <pre>$error</pre></li>\n";
+   print "$li_fail Couldn't create ${LDAP['current_id_dn']}: <pre>$error</pre></li>\n";
    $no_errors = FALSE;
   }
  }
 
-
- if (isset($_POST['setup_last_uid'])) {
-
-  $highest_uid = ldap_get_highest_id($ldap_connection,'uid');
-  $description = "Records the last UID used to create a Posix account. This prevents the re-use of a UID from a deleted account.";
-
-  $uid_add = ldap_add($ldap_connection, "cn=lastUID,${LDAP['base_dn']}", array( 'objectClass' => array('device','top'),
-                                                                                'serialnumber' => $highest_uid,
-                                                                                'description' => $description )
-                    );
-
-  if ($uid_add == TRUE) {
-   print "$li_good Created <strong>cn=lastUID,${LDAP['base_dn']}</strong></li>\n";
-  }
-  else {
-   $error = ldap_error($ldap_connection);
-   print "$li_fail Couldn't create cn=lastUID,${LDAP['base_dn']}: <pre>$error</pre></li>\n";
-   $no_errors = FALSE;
-  }
- }
 
 
  if (isset($_POST['setup_default_group'])) {

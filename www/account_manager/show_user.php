@@ -2,7 +2,7 @@
 
 include_once __DIR__ . "/../includes/web_functions.inc.php";
 include_once __DIR__ . "/../includes/ldap_functions.inc.php";
-include_once __DIR__ . "/../includes/module_functions.inc.php";
+include_once __DIR__ . "/module_functions.inc.php";
 set_page_access("admin");
 
 render_header();
@@ -19,7 +19,8 @@ $attribute_map = array( "givenname"      => "First name",
                         "gidnumber"      => "GID",
                         "loginshell"     => "Login shell",
                         "homedirectory"  => "Home directory",
-                        "mail"           => "Email"
+			"mail"           => "Email",
+			"sambaSID"	 => "SambaSID"
                        );
 
 

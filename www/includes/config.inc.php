@@ -14,11 +14,18 @@
  $LDAP['group_ou'] = (getenv('LDAP_GROUP_OU') ? getenv('LDAP_GROUP_OU') : 'groups');
  $LDAP['user_ou'] = (getenv('LDAP_USER_OU') ? getenv('LDAP_USER_OU') : 'people');
 
- $LDAP['group_membership_attribute'] = (getenv('LDAP_GROUP_MEMBERSHIP_ATTRIBUTE') ? getenv('LDAP_GROUP_MEMBERSHIP_ATTRIBUTE') : 'uniquemember');
+ $LDAP['group_membership_attribute'] = (getenv('LDAP_GROUP_MEMBERSHIP_ATTRIBUTE') ? getenv('LDAP_GROUP_MEMBERSHIP_ATTRIBUTE') : 'member');
  $LDAP['group_membership_uses_uid'] = ((strcmp(getenv('LDAP_GROUP_MEMBERSHIP_USES_UID'),'TRUE') == 0) ? TRUE : FALSE);
 
  $LDAP['account_attribute'] = (getenv('LDAP_ACCOUNT_ATTRIBUTE') ? getenv('LDAP_ACCOUNT_ATTRIBUTE') : 'uid');
  $LDAP['require_starttls'] = ((strcmp(getenv('LDAP_REQUIRE_STARTTLS'),'TRUE') == 0) ? TRUE : FALSE);
+ $LDAP['try_starttls'] = ((strcmp(getenv('LDAP_TRY_STARTTLS'),'TRUE') == 0) ? TRUE : FALSE);
+ $LDAP['password_encoding'] = (getenv('LDAP_PASSWORD_ENCODING') ? strtoupper(getenv('LDAP_PASSWORD_ENCODING')) : 'MD5');
+
+ $LDAP['current_id_dn'] = (getenv('LDAP_CURRENT_ID_DN') ? getenv('LDAP_CURRENT_ID_DN') : 'cn=lastID,'.$LDAP['base_dn']);
+
+ $LDAP['samba_domain_name'] = (getenv('LDAP_SAMBA_DOMAIN_NAME') ? getenv('LDAP_SAMBA_DOMAIN_NAME') : 'WORKGROUP');
+
 
  $DEFAULT_USER_GROUP = (getenv('DEFAULT_USER_GROUP') ? getenv('DEFAULT_USER_GROUP') : 'everybody');
  $DEFAULT_USER_SHELL = (getenv('DEFAULT_USER_SHELL') ? getenv('DEFAULT_SHELL') : '/bin/bash');
@@ -55,6 +62,10 @@
  }
  if (empty($LDAP['admins_group'])) {
   $errors .= "<div class='alert alert-warning'><p class='text-center'>LDAP_ADMINS_GROUP isn't set</p></div>\n";
+ }
+ if (! in_array($LDAP['password_encoding'], array('MD5', 'SSHA'))) {
+     $errors .= "<div class='alert alert-warning'><p class='text-center'>LDAP_PASSWORD_ENCODING not set to a valid value (MD5, SSHA) so using default MD5</p></div>\n";
+     $LDAP['password_encoding'] = 'MD5';
  }
 
  if ($errors != "") {
